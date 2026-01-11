@@ -2,6 +2,7 @@
 L4D2 multifunctional equipment mod, features two modes
 
 Note: I used AI similar to ChatGPT to make this plugin, so don't expect me to understand all the code.
+
 See original thread：
 
 https://forums.alliedmods.net/showthread.php?t=166580 (panxiaohai)

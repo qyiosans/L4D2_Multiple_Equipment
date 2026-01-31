@@ -46,6 +46,11 @@ float PressStartTime[MAXPLAYERS+1];
 float LastSwitchTime[MAXPLAYERS+1];
 float LastMeSwitchTime[MAXPLAYERS+1];
 
+// Add new variables for E+RMB combo key detection
+bool EKeyPressed[MAXPLAYERS+1];
+bool RMBKeyPressed[MAXPLAYERS+1];
+float ComboKeyPressTime[MAXPLAYERS+1];
+
 Handle l4d_me_mode;
 Handle l4d_me_view;
 Handle l4d_me_slot[5];
@@ -57,37 +62,39 @@ Handle ME_Notify[MAXPLAYERS+1];
 Handle AmmoUseDistance = INVALID_HANDLE;
 Handle g_hCookie;
 
-// Individual weapon ammo lock convars
-Handle g_hAmmoLockSMG;
-Handle g_hAmmoLockSilencedSMG;
-Handle g_hAmmoLockMP5;
-Handle g_hAmmoLockRifle;
-Handle g_hAmmoLockSG552;
-Handle g_hAmmoLockDesertRifle;
-Handle g_hAmmoLockAK47;
-Handle g_hAmmoLockPumpShotgun;
-Handle g_hAmmoLockChromeShotgun;
-Handle g_hAmmoLockAutoShotgun;
-Handle g_hAmmoLockSPAS;
-Handle g_hAmmoLockHuntingRifle;
-Handle g_hAmmoLockScout;
-Handle g_hAmmoLockMilitarySniper;
-Handle g_hAmmoLockAWP;
-Handle g_hAmmoLockM60;
-Handle g_hAmmoLockGrenadeLauncher;
-Handle g_hAmmoLockPistol;
-Handle g_hAmmoLockMagnum;
-Handle g_hAmmoLockChainsaw;
+// Replace old ammo lock convars with individual weapon convars
+Handle l4d_ammo_lock_rifle;
+Handle l4d_ammo_lock_rifle_sg552;
+Handle l4d_ammo_lock_rifle_desert;
+Handle l4d_ammo_lock_rifle_ak47;
+Handle l4d_ammo_lock_rifle_m60;
+Handle l4d_ammo_lock_smg;
+Handle l4d_ammo_lock_smg_silenced;
+Handle l4d_ammo_lock_smg_mp5;
+Handle l4d_ammo_lock_pumpshotgun;
+Handle l4d_ammo_lock_shotgun_chrome;
+Handle l4d_ammo_lock_autoshotgun;
+Handle l4d_ammo_lock_shotgun_spas;
+Handle l4d_ammo_lock_hunting_rifle;
+Handle l4d_ammo_lock_sniper_scout;
+Handle l4d_ammo_lock_sniper_military;
+Handle l4d_ammo_lock_sniper_awp;
+Handle l4d_ammo_lock_grenade_launcher;
+Handle l4d_ammo_lock_pistol;
+Handle l4d_ammo_lock_pistol_magnum;
 
 int	g_iClientModePref[MAXPLAYERS+1];// Client cookie preferences - mode client last used 
-bool g_bModeSelected[MAXPLAYERS+1]; // Track if player has selected mode
+
+// Array to store third party melee weapons for L4D2
+ArrayList g_hThirdPartyMeleeModels;
+ArrayList g_hThirdPartyMeleeNames;
 
 public Plugin myinfo =
 {
 	name = "Multiple Equipment",
 	author = "Yani & MasterMind42 & Pan Xiaohai",
 	description = "Carry 2 items in each slot",
-	version = "3.9",
+	version = "3.9", // Updated version
 	url = ""
 }
 
@@ -100,42 +107,43 @@ public void OnPluginStart()
 	l4d_me_slot[2] = CreateConVar("l4d_me_slot2", "1", "(Pipebomb), 0=Disable, 1=Enable");
 	l4d_me_slot[3] = CreateConVar("l4d_me_slot3", "1", "(Medkit), 0=Disable, 1=Enable");
 	l4d_me_slot[4] = CreateConVar("l4d_me_slot4", "1", "(Pills), 0=Disable, 1=Enable");
-	l4d_me_mode = CreateConVar("l4d_me_mode", "2", "1=Single Tap Mode, 2=Double Tap Mode");
+	l4d_me_mode = CreateConVar("l4d_me_mode", "0", "1=Single Tap Mode, 2=Double Tap Mode");
 
 	l4d_me_view = CreateConVar("l4d_me_view", "1", "0=Disable Extra Equipment View, 1=Enable Extra Equipment View");
 	l4d_me_afk_save = CreateConVar("l4d_me_afk_save", "1", "0=Disable AFK Save, 1=Enable AFK Save");
 	l4d_me_custom_notify = CreateConVar("l4d_me_custom_notify", "1", "0=Disable Custom Message, 1=Enable Chat Message, 2=Enable Hint Message");
 	l4d_me_custom_notify_msg = CreateConVar("l4d_me_custom_notify_msg", "[ME] Use !me to change mode if the server's CFG mode is 0.", "Create a custom welcome message for your server.");
-	l4d_me_player_connect = CreateConVar("l4d_me_player_connect", "0", "0=Disable Player Connect Message, 1=Enable Player Connect Message");
-	
-	// Individual weapon ammo lock convars
-	g_hAmmoLockSMG = CreateConVar("l4d_ammo_lock_smg", "1", "0=Disable Lock SMG Ammo, 1=Enable Lock SMG Ammo", FCVAR_NOTIFY);
-	g_hAmmoLockSilencedSMG = CreateConVar("l4d_ammo_lock_silenced_smg", "1", "0=Disable Lock Silenced SMG Ammo, 1=Enable Lock Silenced SMG Ammo", FCVAR_NOTIFY);
-	g_hAmmoLockMP5 = CreateConVar("l4d_ammo_lock_mp5", "1", "0=Disable Lock MP5 Ammo, 1=Enable Lock MP5 Ammo", FCVAR_NOTIFY);
-	g_hAmmoLockRifle = CreateConVar("l4d_ammo_lock_rifle", "1", "0=Disable Lock Rifle Ammo, 1=Enable Lock Rifle Ammo", FCVAR_NOTIFY);
-	g_hAmmoLockSG552 = CreateConVar("l4d_ammo_lock_sg552", "1", "0=Disable Lock SG552 Ammo, 1=Enable Lock SG552 Ammo", FCVAR_NOTIFY);
-	g_hAmmoLockDesertRifle = CreateConVar("l4d_ammo_lock_desert_rifle", "1", "0=Disable Lock Desert Rifle Ammo, 1=Enable Lock Desert Rifle Ammo", FCVAR_NOTIFY);
-	g_hAmmoLockAK47 = CreateConVar("l4d_ammo_lock_ak47", "1", "0=Disable Lock AK47 Ammo, 1=Enable Lock AK47 Ammo", FCVAR_NOTIFY);
-	g_hAmmoLockPumpShotgun = CreateConVar("l4d_ammo_lock_pumpshotgun", "1", "0=Disable Lock Pump Shotgun Ammo, 1=Enable Lock Pump Shotgun Ammo", FCVAR_NOTIFY);
-	g_hAmmoLockChromeShotgun = CreateConVar("l4d_ammo_lock_chrome_shotgun", "1", "0=Disable Lock Chrome Shotgun Ammo, 1=Enable Lock Chrome Shotgun Ammo", FCVAR_NOTIFY);
-	g_hAmmoLockAutoShotgun = CreateConVar("l4d_ammo_lock_autoshotgun", "1", "0=Disable Lock Auto Shotgun Ammo, 1=Enable Lock Auto Shotgun Ammo", FCVAR_NOTIFY);
-	g_hAmmoLockSPAS = CreateConVar("l4d_ammo_lock_spas", "1", "0=Disable Lock SPAS Ammo, 1=Enable Lock SPAS Ammo", FCVAR_NOTIFY);
-	g_hAmmoLockHuntingRifle = CreateConVar("l4d_ammo_lock_hunting_rifle", "1", "0=Disable Lock Hunting Rifle Ammo, 1=Enable Lock Hunting Rifle Ammo", FCVAR_NOTIFY);
-	g_hAmmoLockScout = CreateConVar("l4d_ammo_lock_scout", "1", "0=Disable Lock Scout Ammo, 1=Enable Lock Scout Ammo", FCVAR_NOTIFY);
-	g_hAmmoLockMilitarySniper = CreateConVar("l4d_ammo_lock_military_sniper", "1", "0=Disable Lock Military Sniper Ammo, 1=Enable Lock Military Sniper Ammo", FCVAR_NOTIFY);
-	g_hAmmoLockAWP = CreateConVar("l4d_ammo_lock_awp", "1", "0=Disable Lock AWP Ammo, 1=Enable Lock AWP Ammo", FCVAR_NOTIFY);
-	g_hAmmoLockM60 = CreateConVar("l4d_ammo_lock_m60", "1", "0=Disable Lock M60 Ammo, 1=Enable Lock M60 Ammo", FCVAR_NOTIFY);
-	g_hAmmoLockGrenadeLauncher = CreateConVar("l4d_ammo_lock_grenade_launcher", "1", "0=Disable Lock Grenade Launcher Ammo, 1=Enable Lock Grenade Launcher Ammo", FCVAR_NOTIFY);
-	g_hAmmoLockPistol = CreateConVar("l4d_ammo_lock_pistol", "0", "0=Disable Lock Pistol Ammo, 1=Enable Lock Pistol Ammo", FCVAR_NOTIFY);
-	g_hAmmoLockMagnum = CreateConVar("l4d_ammo_lock_magnum", "0", "0=Disable Lock Magnum Ammo, 1=Enable Lock Magnum Ammo", FCVAR_NOTIFY);
-	g_hAmmoLockChainsaw = CreateConVar("l4d_ammo_lock_chainsaw", "0", "0=Disable Lock Chainsaw Ammo, 1=Enable Lock Chainsaw Ammo", FCVAR_NOTIFY);
-	
+	l4d_me_player_connect = CreateConVar("l4d_me_player_connect", "1", "0=Disable Player Connect Message, 1=Enable Player Connect Message");
 	AmmoUseDistance = CreateConVar("l4d2_ammo_pile_use_distance", "96", "This is the distance at which you use an ammo pile, for unlocking ammo only", FCVAR_NOTIFY);
+
+	// Individual weapon ammo lock convars for L4D2
+	if(L4D2Version)
+	{
+		l4d_ammo_lock_rifle = CreateConVar("l4d_ammo_lock_rifle", "1", "0=Disable Lock Rifle Ammo, 1=Enable Lock Rifle Ammo", FCVAR_NOTIFY);
+		l4d_ammo_lock_rifle_sg552 = CreateConVar("l4d_ammo_lock_rifle_sg552", "1", "0=Disable Lock Rifle SG552 Ammo, 1=Enable Lock Rifle SG552 Ammo", FCVAR_NOTIFY);
+		l4d_ammo_lock_rifle_desert = CreateConVar("l4d_ammo_lock_rifle_desert", "1", "0=Disable Lock Desert Rifle Ammo, 1=Enable Lock Desert Rifle Ammo", FCVAR_NOTIFY);
+		l4d_ammo_lock_rifle_ak47 = CreateConVar("l4d_ammo_lock_rifle_ak47", "1", "0=Disable Lock AK47 Ammo, 1=Enable Lock AK47 Ammo", FCVAR_NOTIFY);
+		l4d_ammo_lock_rifle_m60 = CreateConVar("l4d_ammo_lock_rifle_m60", "1", "0=Disable Lock M60 Ammo, 1=Enable Lock M60 Ammo", FCVAR_NOTIFY);
+		l4d_ammo_lock_smg = CreateConVar("l4d_ammo_lock_smg", "1", "0=Disable Lock SMG Ammo, 1=Enable Lock SMG Ammo", FCVAR_NOTIFY);
+		l4d_ammo_lock_smg_silenced = CreateConVar("l4d_ammo_lock_smg_silenced", "1", "0=Disable Lock Silenced SMG Ammo, 1=Enable Lock Silenced SMG Ammo", FCVAR_NOTIFY);
+		l4d_ammo_lock_smg_mp5 = CreateConVar("l4d_ammo_lock_smg_mp5", "1", "0=Disable Lock MP5 Ammo, 1=Enable Lock MP5 Ammo", FCVAR_NOTIFY);
+		l4d_ammo_lock_pumpshotgun = CreateConVar("l4d_ammo_lock_pumpshotgun", "1", "0=Disable Lock Pump Shotgun Ammo, 1=Enable Lock Pump Shotgun Ammo", FCVAR_NOTIFY);
+		l4d_ammo_lock_shotgun_chrome = CreateConVar("l4d_ammo_lock_shotgun_chrome", "1", "0=Disable Lock Chrome Shotgun Ammo, 1=Enable Lock Chrome Shotgun Ammo", FCVAR_NOTIFY);
+		l4d_ammo_lock_autoshotgun = CreateConVar("l4d_ammo_lock_autoshotgun", "1", "0=Disable Lock Auto Shotgun Ammo, 1=Enable Lock Auto Shotgun Ammo", FCVAR_NOTIFY);
+		l4d_ammo_lock_shotgun_spas = CreateConVar("l4d_ammo_lock_shotgun_spas", "1", "0=Disable Lock SPAS Shotgun Ammo, 1=Enable Lock SPAS Shotgun Ammo", FCVAR_NOTIFY);
+		l4d_ammo_lock_hunting_rifle = CreateConVar("l4d_ammo_lock_hunting_rifle", "1", "0=Disable Lock Hunting Rifle Ammo, 1=Enable Lock Hunting Rifle Ammo", FCVAR_NOTIFY);
+		l4d_ammo_lock_sniper_scout = CreateConVar("l4d_ammo_lock_sniper_scout", "1", "0=Disable Lock Scout Sniper Ammo, 1=Enable Lock Scout Sniper Ammo", FCVAR_NOTIFY);
+		l4d_ammo_lock_sniper_military = CreateConVar("l4d_ammo_lock_sniper_military", "1", "0=Disable Lock Military Sniper Ammo, 1=Enable Lock Military Sniper Ammo", FCVAR_NOTIFY);
+		l4d_ammo_lock_sniper_awp = CreateConVar("l4d_ammo_lock_sniper_awp", "1", "0=Disable Lock AWP Sniper Ammo, 1=Enable Lock AWP Sniper Ammo", FCVAR_NOTIFY);
+		l4d_ammo_lock_grenade_launcher = CreateConVar("l4d_ammo_lock_grenade_launcher", "1", "0=Disable Lock Grenade Launcher Ammo, 1=Enable Lock Grenade Launcher Ammo", FCVAR_NOTIFY);
+		l4d_ammo_lock_pistol = CreateConVar("l4d_ammo_lock_pistol", "0", "0=Disable Lock Pistol Ammo, 1=Enable Lock Pistol Ammo", FCVAR_NOTIFY);
+		l4d_ammo_lock_pistol_magnum = CreateConVar("l4d_ammo_lock_pistol_magnum", "0", "0=Disable Lock Magnum Pistol Ammo, 1=Enable Lock Magnum Pistol Ammo", FCVAR_NOTIFY);
+	}
 
 	HookEvent("player_team", ePlayerTeam);
 	HookEvent("player_death", ePlayerDeath, EventHookMode_Pre);
 	HookEvent("player_disconnect", ePlayerDisconnect, EventHookMode_Pre);
- 	HookEvent("player_use", player_use);
+	HookEvent("player_use", player_use);
 
 	HookEvent("round_start", round_start); 
 	HookEvent("round_end", round_end );
@@ -153,7 +161,7 @@ public void OnPluginStart()
 	HookEvent("heal_begin", eHealBegin);
 	HookEvent("heal_end", eHealEnd);
 	HookEvent("heal_success", eHealSuccess);
- 	HookEvent("revive_begin", eReviveBegin);
+	HookEvent("revive_begin", eReviveBegin);
 	HookEvent("revive_end", eReviveEnd);
 	HookEvent("pills_used", ePillsUsed);
 
@@ -170,7 +178,13 @@ public void OnPluginStart()
 	g_hCookie = RegClientCookie("l4d_multiple_equipment_mode", "Multiple Equipment - Mode", CookieAccess_Protected);
 
 	AddCommandListener(Listener_CallVote, "callvote");
-	AddCommandListener(Listener_Vote, "Vote");
+
+	// Initialize arrays for third party melee weapons (L4D2 only)
+	if(L4D2Version)
+	{
+		g_hThirdPartyMeleeModels = new ArrayList(PLATFORM_MAX_PATH);
+		g_hThirdPartyMeleeNames = new ArrayList(LEN64);
+	}
 
 	ResetClientStateAll();
 }
@@ -210,11 +224,19 @@ public void OnClientCookiesCached(int client)
 		if(StringToInt(sCookie) == 1 || StringToInt(sCookie) == 2 )
 		{
 			g_iClientModePref[client] = StringToInt(sCookie);
-			g_bModeSelected[client] = true;
-		} else {
+		} 
+		else 
+		{
 			g_iClientModePref[client] = 0;
-			g_bModeSelected[client] = false;
 		}
+		
+		// Apply mode from cookie
+		if(g_iClientModePref[client] == 1)
+			ControlMode[client] = 0;
+		else if(g_iClientModePref[client] == 2)
+			ControlMode[client] = 1;
+		else
+			ControlMode[client] = 0;
 	}
 }
 
@@ -222,10 +244,9 @@ void SetClientPrefs(int client)
 {
 	if( !IsFakeClient(client) )
 	{	
-		static char sCookie[1];
+		static char sCookie[2];
 		Format(sCookie, sizeof(sCookie), "%i", g_iClientModePref[client]);
 		SetClientCookie(client, g_hCookie, sCookie);
-		g_bModeSelected[client] = true;
 	}
 }
 
@@ -258,29 +279,16 @@ ModeSelectMenu(client)
 {
 	new mode=GetConVarInt(l4d_me_mode);
 	
-	// Clear mode selection flag to allow menu again
-	g_bModeSelected[client] = false;
+	// Always show menu when command is used, regardless of mode
+	new Handle:menu = CreateMenu(MenuSelector1);
+	SetMenuTitle(menu, "Select Equipment Control Mode");
+	AddMenuItem(menu, "1", "Mode 1: Single Press + E+RMB");
+	AddMenuItem(menu, "2", "Mode 2: Double Press + QQ");
+	SetMenuExitButton(menu, true);
+	 
+	DisplayMenu(menu, client, 10);
 	
-	if(mode==0)
-	{
-		if (g_iClientModePref[client] > 0 && g_iClientModePref[client] < 3 && g_bModeSelected[client]) {
-			 ControlMode[client] = g_iClientModePref[client];
-		} else {
-			new Handle:menu = CreateMenu(MenuSelector1);
-			SetMenuTitle(menu, "Select Equipment Control Mode");
-			AddMenuItem(menu, "1", "Mode 1:Single Press + E+RMB");
-			AddMenuItem(menu, "2", "Mode 2:Double Press + QQ");
-			SetMenuExitButton(menu, true);
-			 
-			DisplayMenu(menu, client, 10); 
-		}
-	}
-	else
-	{
-		if(mode==1)ControlMode[client]=0;
-		else ControlMode[client]=1;
-		g_bModeSelected[client] = true;
-	}
+	return;
 }
 
 public MenuSelector1(Handle:menu, MenuAction:action, client, param2)
@@ -313,7 +321,7 @@ public MenuSelector1(Handle:menu, MenuAction:action, client, param2)
 
 ShowMsg(client,String:msg[])
 {
-	new mode=GetConVarInt(l4d_me_custom_notify);
+	new mode=GetConVarInt(l4d_me_custom_notify_msg);
 	if(mode==0)return;
 	if(mode==1)
 	{
@@ -371,14 +379,13 @@ public Action:player_use(Handle:event, const String:name[], bool:dontBroadcast)
 	if(g_gamestart==false)
 	{				
 		g_gamestart=true;
-		ShowMsg(0, "[ME] Multiple Equipments started successfully!");
+		ShowMsg(0, "[ME] Multiple Equipment started successfully!");
 	} 
 	 
 	if(MeEnable[client]==false)
 	{		
 		EnableClient(client,true);
 		ShowMsg(client, "[ME] Multiple Equipments enabled");
-
 	}
 	if(FirstRun[client]==true)
 	{
@@ -432,7 +439,7 @@ UnHookAll( )
 public void OnClientPostAdminCheck(int client)
 {
 	//ROUND START WEAPON VIEW FIX
-	if(GetConVarInt(l4d_me_view) == 1)
+	if(GetConVarInt(l4d_me_view) == 1) // && !IsFakeClient(client))
 		CreateTimer(5.0, FixWeaponView, client, TIMER_FLAG_NO_MAPCHANGE);
 
 	//SIMPLE PLAYER CONNECT MESSAGE
@@ -443,16 +450,59 @@ public void OnClientPostAdminCheck(int client)
 public void OnClientPutInServer(int client)
 {
 	if(!IsFakeClient(client))
-	{
 		SDKHook(client, SDKHook_PreThink, OnPreThink); //AMMOLOCK
-		g_bModeSelected[client] = false;
-	}
 }
 
 public void OnPreThink(int client)
 {
 	if(IsValidClient(client))
 		AmmoLock(client);
+}
+
+bool ShouldLockWeaponAmmo(int client, const char[] sClsName)
+{
+	if(!L4D2Version) return false;
+	
+	if (StrEqual(sClsName, "weapon_rifle") && GetConVarInt(l4d_ammo_lock_rifle) == 1)
+		return true;
+	else if (StrEqual(sClsName, "weapon_rifle_sg552") && GetConVarInt(l4d_ammo_lock_rifle_sg552) == 1)
+		return true;
+	else if (StrEqual(sClsName, "weapon_rifle_desert") && GetConVarInt(l4d_ammo_lock_rifle_desert) == 1)
+		return true;
+	else if (StrEqual(sClsName, "weapon_rifle_ak47") && GetConVarInt(l4d_ammo_lock_rifle_ak47) == 1)
+		return true;
+	else if (StrEqual(sClsName, "weapon_rifle_m60") && GetConVarInt(l4d_ammo_lock_rifle_m60) == 1)
+		return true;
+	else if (StrEqual(sClsName, "weapon_smg") && GetConVarInt(l4d_ammo_lock_smg) == 1)
+		return true;
+	else if (StrEqual(sClsName, "weapon_smg_silenced") && GetConVarInt(l4d_ammo_lock_smg_silenced) == 1)
+		return true;
+	else if (StrEqual(sClsName, "weapon_smg_mp5") && GetConVarInt(l4d_ammo_lock_smg_mp5) == 1)
+		return true;
+	else if (StrEqual(sClsName, "weapon_pumpshotgun") && GetConVarInt(l4d_ammo_lock_pumpshotgun) == 1)
+		return true;
+	else if (StrEqual(sClsName, "weapon_shotgun_chrome") && GetConVarInt(l4d_ammo_lock_shotgun_chrome) == 1)
+		return true;
+	else if (StrEqual(sClsName, "weapon_autoshotgun") && GetConVarInt(l4d_ammo_lock_autoshotgun) == 1)
+		return true;
+	else if (StrEqual(sClsName, "weapon_shotgun_spas") && GetConVarInt(l4d_ammo_lock_shotgun_spas) == 1)
+		return true;
+	else if (StrEqual(sClsName, "weapon_hunting_rifle") && GetConVarInt(l4d_ammo_lock_hunting_rifle) == 1)
+		return true;
+	else if (StrEqual(sClsName, "weapon_sniper_scout") && GetConVarInt(l4d_ammo_lock_sniper_scout) == 1)
+		return true;
+	else if (StrEqual(sClsName, "weapon_sniper_military") && GetConVarInt(l4d_ammo_lock_sniper_military) == 1)
+		return true;
+	else if (StrEqual(sClsName, "weapon_sniper_awp") && GetConVarInt(l4d_ammo_lock_sniper_awp) == 1)
+		return true;
+	else if (StrEqual(sClsName, "weapon_grenade_launcher") && GetConVarInt(l4d_ammo_lock_grenade_launcher) == 1)
+		return true;
+	else if (StrEqual(sClsName, "weapon_pistol") && GetConVarInt(l4d_ammo_lock_pistol) == 1)
+		return true;
+	else if (StrEqual(sClsName, "weapon_pistol_magnum") && GetConVarInt(l4d_ammo_lock_pistol_magnum) == 1)
+		return true;
+	
+	return false;
 }
 
 void AmmoLock(int client)
@@ -469,51 +519,7 @@ void AmmoLock(int client)
 			if(sClsName[0] != 'w' || StrContains(sClsName, "weapon_", false) != 0)
 				return;
 
-			// Check individual weapon ammo lock convars
-			bool bShouldLock = false;
-			
-			if (StrEqual(sClsName, "weapon_smg") && GetConVarInt(g_hAmmoLockSMG) == 1)
-				bShouldLock = true;
-			else if (StrEqual(sClsName, "weapon_smg_silenced") && GetConVarInt(g_hAmmoLockSilencedSMG) == 1)
-				bShouldLock = true;
-			else if (StrEqual(sClsName, "weapon_smg_mp5") && GetConVarInt(g_hAmmoLockMP5) == 1)
-				bShouldLock = true;
-			else if (StrEqual(sClsName, "weapon_rifle") && GetConVarInt(g_hAmmoLockRifle) == 1)
-				bShouldLock = true;
-			else if (StrEqual(sClsName, "weapon_rifle_sg552") && GetConVarInt(g_hAmmoLockSG552) == 1)
-				bShouldLock = true;
-			else if (StrEqual(sClsName, "weapon_rifle_desert") && GetConVarInt(g_hAmmoLockDesertRifle) == 1)
-				bShouldLock = true;
-			else if (StrEqual(sClsName, "weapon_rifle_ak47") && GetConVarInt(g_hAmmoLockAK47) == 1)
-				bShouldLock = true;
-			else if (StrEqual(sClsName, "weapon_pumpshotgun") && GetConVarInt(g_hAmmoLockPumpShotgun) == 1)
-				bShouldLock = true;
-			else if (StrEqual(sClsName, "weapon_shotgun_chrome") && GetConVarInt(g_hAmmoLockChromeShotgun) == 1)
-				bShouldLock = true;
-			else if (StrEqual(sClsName, "weapon_autoshotgun") && GetConVarInt(g_hAmmoLockAutoShotgun) == 1)
-				bShouldLock = true;
-			else if (StrEqual(sClsName, "weapon_shotgun_spas") && GetConVarInt(g_hAmmoLockSPAS) == 1)
-				bShouldLock = true;
-			else if (StrEqual(sClsName, "weapon_hunting_rifle") && GetConVarInt(g_hAmmoLockHuntingRifle) == 1)
-				bShouldLock = true;
-			else if (StrEqual(sClsName, "weapon_sniper_scout") && GetConVarInt(g_hAmmoLockScout) == 1)
-				bShouldLock = true;
-			else if (StrEqual(sClsName, "weapon_sniper_military") && GetConVarInt(g_hAmmoLockMilitarySniper) == 1)
-				bShouldLock = true;
-			else if (StrEqual(sClsName, "weapon_sniper_awp") && GetConVarInt(g_hAmmoLockAWP) == 1)
-				bShouldLock = true;
-			else if (StrEqual(sClsName, "weapon_rifle_m60") && GetConVarInt(g_hAmmoLockM60) == 1)
-				bShouldLock = true;
-			else if (StrEqual(sClsName, "weapon_grenade_launcher") && GetConVarInt(g_hAmmoLockGrenadeLauncher) == 1)
-				bShouldLock = true;
-			else if (StrEqual(sClsName, "weapon_pistol") && GetConVarInt(g_hAmmoLockPistol) == 1)
-				bShouldLock = true;
-			else if (StrEqual(sClsName, "weapon_pistol_magnum") && GetConVarInt(g_hAmmoLockMagnum) == 1)
-				bShouldLock = true;
-			else if (StrEqual(sClsName, "weapon_chainsaw") && GetConVarInt(g_hAmmoLockChainsaw) == 1)
-				bShouldLock = true;
-			
-			if (bShouldLock)
+			if (ShouldLockWeaponAmmo(client, sClsName))
 			{
 				int Clip = GetEntProp(weapon, Prop_Data, "m_iClip1");
 				int AmmoType = GetEntProp(weapon, Prop_Send, "m_iPrimaryAmmoType");
@@ -527,7 +533,7 @@ void AmmoLock(int client)
 					ChangeEdictState(client, FindDataMapInfo(client, "m_iAmmo"));
 					int secondweapon = CheckSecondSlotHasWeaponAndAmmo(client);
 					if (secondweapon > 0) {
-						// Do nothing, just check
+						// Switched to secondary slot
 					}
 				}
 			}
@@ -539,7 +545,7 @@ public Action ePlayerFirstSpawn(Handle event, const char[] name, bool dont_broad
 {
 	int client = GetClientOfUserId(GetEventInt(event, "userid"));
 
- 	if(GetConVarInt(l4d_me_afk_save) == 1)
+	if(GetConVarInt(l4d_me_afk_save) == 1)
 		SaveEquipment(client);
 }
 
@@ -557,7 +563,6 @@ public Action:sm_givewp(client,args)
 	{		
 		EnableClient(client,true);
 		ShowMsg(client, "[ME] Multiple Equipments enabled");
-
 	}
 	if(FirstRun[client]==true)
 	{
@@ -570,31 +575,15 @@ public Action:sm_givewp(client,args)
 
 public Action Listener_CallVote(int client, const char[] command, int argc)
 {
-	if (argc >= 1)
+	if (client > 0 && client <= MaxClients && IsClientInGame(client))
 	{
 		GetCmdArg(1, VoteFix[client], sizeof(VoteFix[]));
-	}
-}
 
-public Action Listener_Vote(int client, const char[] command, int argc)
-{
-	if (argc >= 2)
-	{
-		char sArg[32];
-		GetCmdArg(2, sArg, sizeof(sArg));
-		
-		// Check if vote is successful (passed)
-		if (StrEqual(sArg, "Yes") || StrEqual(sArg, "No"))
+		if (StrEqual(VoteFix[client], "restartgame", false) || StrEqual(VoteFix[client], "changemission", false) || StrEqual(VoteFix[client], "returntolobby", false))
 		{
-			// Check what type of vote was called
-			if (StrEqual(VoteFix[client], "restartgame", false) || 
-				StrEqual(VoteFix[client], "changemission", false) || 
-				StrEqual(VoteFix[client], "returntolobby", false))
-			{
-				// Clear stored items completely for vote success
-				ResetClientStateAll();
-				ResetBackupItemsAll();
-			}
+			// Clean both stored items and backup data on successful vote
+			ResetClientStateAll();
+			CleanBackupDataAll();
 		}
 	}
 	return Plugin_Continue;
@@ -670,7 +659,7 @@ public void OnGameFrame()
 public Action sm_s0(int client, int args)
 {
 	if (!IsSurvivor(client) || !IsPlayerAlive(client))
-		return; 
+		return; // Plugin_Continue;
 
 	float time = GetEngineTime();
 	int buttons = GetClientButtons(client);
@@ -686,13 +675,13 @@ public Action eWeaponFire(Handle event, const char[] name, bool dontBroadcast)
 	int client = GetClientOfUserId(GetEventInt(event, "userid"));
 
 	if (!IsSurvivor(client) || !IsPlayerAlive(client))
-		return;
+		return; // Plugin_Continue;
 
 	char item[10];
 	GetEventString(event, "weapon", item, sizeof(item));
 
 	if(item[0] != 'p' && item[0] != 'm' && item[0] != 'v')
-		return;
+		return; // Plugin_Continue;
 
 	switch(item[0])
 	{
@@ -714,141 +703,93 @@ public Action eWeaponFire(Handle event, const char[] name, bool dontBroadcast)
 	}
 }
 
+// Check for E+RMB combo key release for slots 0 and 1 in Mode 1
+void CheckComboKeyRelease(int client, int buttons)
+{
+	static int lastButtons[MAXPLAYERS+1];
+	
+	// Check if both E and RMB were pressed together
+	if ((buttons & IN_USE) && (buttons & IN_ATTACK2))
+	{
+		if (!EKeyPressed[client] || !RMBKeyPressed[client])
+		{
+			// Just started pressing both keys
+			EKeyPressed[client] = true;
+			RMBKeyPressed[client] = true;
+			ComboKeyPressTime[client] = GetEngineTime();
+		}
+	}
+	else
+	{
+		// Check for key release after combo was held
+		if (EKeyPressed[client] && RMBKeyPressed[client])
+		{
+			float holdTime = GetEngineTime() - ComboKeyPressTime[client];
+			
+			// If held for more than 0.001s and one key is released
+			if (holdTime > 0.001 && (!(buttons & IN_USE) || !(buttons & IN_ATTACK2)))
+			{
+				// Trigger swap for slots 0 and 1 only in Mode 1
+				if (ControlMode[client] == 0)
+				{
+					int weapon = GetEntPropEnt(client, Prop_Data, "m_hActiveWeapon");
+					if (weapon > 0)
+					{
+						// Check if active weapon is in slot 0 or 1
+						for (int slot = 0; slot <= 1; slot++)
+						{
+							int slotWeapon = GetPlayerWeaponSlot(client, slot);
+							if (slotWeapon == weapon)
+							{
+								Process(client, GetEngineTime(), buttons, true, weapon);
+								break;
+							}
+						}
+					}
+				}
+			}
+		}
+		
+		// Reset individual key states
+		if (!(buttons & IN_USE))
+			EKeyPressed[client] = false;
+		if (!(buttons & IN_ATTACK2))
+			RMBKeyPressed[client] = false;
+		
+		// Reset combo if both keys are not pressed
+		if (!(buttons & IN_USE) && !(buttons & IN_ATTACK2))
+		{
+			EKeyPressed[client] = false;
+			RMBKeyPressed[client] = false;
+		}
+	}
+	
+	lastButtons[client] = buttons;
+}
+
 public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3], float angles[3], int &weapon)
 {
 	if (!client || !IsSurvivor(client) || !IsPlayerAlive(client))
 		return;
 
-	static bool bEKeyPressed[MAXPLAYERS+1];
-	static bool bRMBPressed[MAXPLAYERS+1];
-	static float fKeyPressTime[MAXPLAYERS+1];
-	
+	// Store last button state
+	int lastButton = LastButton[client];
 	LastButton[client] = buttons;
 	float time = GetEngineTime();
 
-	// Check for E+RMB combo for mode 1 (ControlMode[client]==0)
-	if (ControlMode[client] == 0)
-	{
-		bool bCurrentE = (buttons & IN_USE) != 0;
-		bool bCurrentRMB = (buttons & IN_ATTACK2) != 0;
-		
-		// If both keys are pressed now
-		if (bCurrentE && bCurrentRMB)
-		{
-			// If this is the start of the combo
-			if (!bEKeyPressed[client] || !bRMBPressed[client])
-			{
-				fKeyPressTime[client] = time;
-				bEKeyPressed[client] = true;
-				bRMBPressed[client] = true;
-			}
-			// Check if held for more than 0.001s
-			else if (time - fKeyPressTime[client] > 0.001)
-			{
-				// Check if this is slot 0 or 1
-				int ActiveWeapon = GetEntPropEnt(client, Prop_Data, "m_hActiveWeapon");
-				if (ActiveWeapon > 0)
-				{
-					char sWeapon[32];
-					GetEntityClassname(ActiveWeapon, sWeapon, sizeof(sWeapon));
-					
-					// Check if weapon is in slot 0 or 1
-					bool bIsSlot0 = false;
-					bool bIsSlot1 = false;
-					
-					// Slot 0 weapons
-					if (StrContains(sWeapon, "weapon_smg") == 0 ||
-						StrContains(sWeapon, "weapon_rifle") == 0 ||
-						StrContains(sWeapon, "weapon_pumpshotgun") == 0 ||
-						StrContains(sWeapon, "weapon_shotgun") == 0 ||
-						StrContains(sWeapon, "weapon_autoshotgun") == 0 ||
-						StrContains(sWeapon, "weapon_hunting_rifle") == 0 ||
-						StrContains(sWeapon, "weapon_sniper") == 0 ||
-						StrContains(sWeapon, "weapon_grenade_launcher") == 0)
-					{
-						bIsSlot0 = true;
-					}
-					// Slot 1 weapons
-					else if (StrContains(sWeapon, "weapon_pistol") == 0 ||
-							StrEqual(sWeapon, "weapon_chainsaw") ||
-							StrContains(sWeapon, "weapon_melee") == 0)
-					{
-						bIsSlot1 = true;
-					}
-					
-					if (bIsSlot0 || bIsSlot1)
-					{
-						// Mark that we should switch when keys are released
-						PressingTime[client] = time;
-					}
-				}
-			}
-		}
-		// Check for key release
-		else if ((bEKeyPressed[client] && !bCurrentE) || (bRMBPressed[client] && !bCurrentRMB))
-		{
-			// If we were holding both and time > 0.001s, trigger switch
-			if (bEKeyPressed[client] && bRMBPressed[client] && time - fKeyPressTime[client] > 0.001)
-			{
-				// Check active weapon slot again
-				int ActiveWeapon = GetEntPropEnt(client, Prop_Data, "m_hActiveWeapon");
-				if (ActiveWeapon > 0)
-				{
-					char sWeapon[32];
-					GetEntityClassname(ActiveWeapon, sWeapon, sizeof(sWeapon));
-					
-					bool bIsSlot0 = false;
-					bool bIsSlot1 = false;
-					int slot = -1;
-					
-					if (StrContains(sWeapon, "weapon_smg") == 0 ||
-						StrContains(sWeapon, "weapon_rifle") == 0 ||
-						StrContains(sWeapon, "weapon_pumpshotgun") == 0 ||
-						StrContains(sWeapon, "weapon_shotgun") == 0 ||
-						StrContains(sWeapon, "weapon_autoshotgun") == 0 ||
-						StrContains(sWeapon, "weapon_hunting_rifle") == 0 ||
-						StrContains(sWeapon, "weapon_sniper") == 0 ||
-						StrContains(sWeapon, "weapon_grenade_launcher") == 0)
-					{
-						bIsSlot0 = true;
-						slot = 0;
-					}
-					else if (StrContains(sWeapon, "weapon_pistol") == 0 ||
-							StrEqual(sWeapon, "weapon_chainsaw") ||
-							StrContains(sWeapon, "weapon_melee") == 0)
-					{
-						bIsSlot1 = true;
-						slot = 1;
-					}
-					
-					if ((bIsSlot0 || bIsSlot1) && slot != -1)
-					{
-						// Trigger weapon switch
-						int NewWeapon = SwapItem(client, slot, ActiveWeapon);
-						if (NewWeapon > 0)
-						{
-							SetEntPropEnt(client, Prop_Data, "m_hActiveWeapon", NewWeapon);
-						}
-					}
-				}
-			}
-			
-			// Reset key states
-			bEKeyPressed[client] = bCurrentE;
-			bRMBPressed[client] = bCurrentRMB;
-		}
-	}
+	// Check for E+RMB combo key release for Mode 1
+	CheckComboKeyRelease(client, buttons);
 
-	if ((buttons & IN_ATTACK2) && !(LastButton[client] & IN_ATTACK2))
+	if ((buttons & IN_ATTACK2) && !(lastButton & IN_ATTACK2))
 	{
 		Process(client, time, buttons, false);
 	}
 	else
 	{
-		//SINGLE TAP MODE
-		if(weapon > 0)
+		// SINGLE TAP MODE (with E+RMB combo support)
+		if (ControlMode[client] == 0)
 		{
-			if (ControlMode[client]==0)
+			if(weapon > 0)
 			{
 				int newweapon = weapon;
 
@@ -864,33 +805,35 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 
 				LastWeapon[client] = newweapon;
 			}
-			//DOUBLE TAP MODE
-			else if (ControlMode[client]==1)
-			{
-				if(weapon>0 )
-				{  
-					if(time-LastSwitchTime[client]<0.3)
-					{				  
-						Process(client, time, buttons, true, weapon); 
-					} 
-					else 
-					{			 
-						Process(client, time, buttons, false);				
-					}
-					LastSwitchTime[client]=time; 
+		}
+		// DOUBLE TAP MODE
+		else if (ControlMode[client] == 1)
+		{
+			if(weapon > 0)
+			{  
+				if(time-LastSwitchTime[client] < 0.3)
+				{				  
+					Process(client, time, buttons, true, weapon); 
 				} 
+				else 
+				{			 
+					Process(client, time, buttons, false);				
+				}
+				LastSwitchTime[client] = time; 
+			} 
 
-				int newweapon = weapon;
-				LastWeapon[client] = newweapon;
-			}
+			int newweapon = weapon;
+			LastWeapon[client] = newweapon;
 		}
 	}
 }
 
 public void OnClientDisconnect_Post(int client)
 {
-    LastButton[client] = 0;
-    g_bModeSelected[client] = false;
+	LastButton[client] = 0;
+	EKeyPressed[client] = false;
+	RMBKeyPressed[client] = false;
+	ComboKeyPressTime[client] = 0.0;
 }
 
 public Action DelayRestore(Handle timer, any client)
@@ -917,6 +860,7 @@ int Process(int client, float time, int button, bool isSwitch, int currentWeapon
 	int m_pounceAttacker = GetEntProp(client, Prop_Send, "m_pounceAttacker");
 	int m_isHangingFromLedge = GetEntProp(client, Prop_Send, "m_isHangingFromLedge", 1);
 
+	// Removed incap check, allow switching while incapped
 	if (m_pounceAttacker > 0 || m_tongueOwner > 0 || m_isHangingFromLedge > 0)
 		return NewWeapon;
 
@@ -994,12 +938,15 @@ int SwapItem(int client, int slot, int OldWeapon = 0)
 		if (StrEqual(OldWeaponName, "weapon_pistol"))
 			isPistol = true;
 
-		GetItemInfo(client, slot, OldWeapon, Ammo, Clip, UpgradeBit, UpAmmo, isPistol);
+		// Modified: Check if item is a firearm class for saving upgrade info
+		bool isFirearm = IsFirearmClass(OldWeaponName);
+		
+		GetItemInfo(client, slot, OldWeapon, Ammo, Clip, UpgradeBit, UpAmmo, isPistol, isFirearm);
 		RemovePlayerItem(client, OldWeapon);
 		AcceptEntityInput(OldWeapon, "kill");
 	}
 	
-	//WEAPON CHANGE!!!
+	// WEAPON CHANGE!!!
 	int TheNewWeapon = 0;
 	int NewWeapon = 0;
 
@@ -1010,7 +957,11 @@ int SwapItem(int client, int slot, int OldWeapon = 0)
 	{
 		EquipPlayerWeapon(client, NewWeapon);
 		SetEntPropEnt(client, Prop_Data, "m_hActiveWeapon" , NewWeapon);
-		SetItemInfo(client, slot, NewWeapon , ItemInfo[client][slot][0], ItemInfo[client][slot][1], ItemInfo[client][slot][2], ItemInfo[client][slot][3]);
+		
+		// Modified: Check if new item is a firearm class for applying upgrade info
+		bool isFirearm = IsFirearmClass(ItemName[client][slot]);
+		SetItemInfo(client, slot, NewWeapon , ItemInfo[client][slot][0], ItemInfo[client][slot][1], ItemInfo[client][slot][2], ItemInfo[client][slot][3], isFirearm);
+		
 		TheNewWeapon = NewWeapon;
 	}
 
@@ -1027,80 +978,82 @@ int SwapItem(int client, int slot, int OldWeapon = 0)
 	return TheNewWeapon;
 }
 
-void SetItemInfo (int client, int slot, int weapon, int ammo, int clip, int upgradeBit, int upammo)
+bool IsFirearmClass(const char[] classname)
 {
-	// Check if weapon is a firearm (not melee or chainsaw)
-	bool bIsFirearm = false;
-	char sClsName[32];
-	if (weapon > 0)
+	// Check if the classname is a firearm (primary or secondary weapon)
+	if (StrContains(classname, "weapon_rifle") == 0 ||
+		StrContains(classname, "weapon_smg") == 0 ||
+		StrContains(classname, "weapon_shotgun") == 0 ||
+		StrContains(classname, "weapon_sniper") == 0 ||
+		StrContains(classname, "weapon_grenade_launcher") == 0 ||
+		StrContains(classname, "weapon_pistol") == 0 ||
+		StrEqual(classname, "weapon_chainsaw"))
 	{
-		GetEntityClassname(weapon, sClsName, sizeof(sClsName));
-		
-		// Check if it's a firearm (primary or pistol)
-		if (StrContains(sClsName, "weapon_smg") == 0 ||
-			StrContains(sClsName, "weapon_rifle") == 0 ||
-			StrContains(sClsName, "weapon_shotgun") == 0 ||
-			StrContains(sClsName, "weapon_sniper") == 0 ||
-			StrContains(sClsName, "weapon_grenade_launcher") == 0 ||
-			StrContains(sClsName, "weapon_pistol") == 0)
-		{
-			bIsFirearm = true;
-		}
+		return true;
 	}
 	
-	if (bIsFirearm)
+	return false;
+}
+
+void SetItemInfo(int client, int slot, int weapon, int ammo, int clip, int upgradeBit, int upammo, bool isFirearm = false)
+{
+	// Modified: Only apply upgrade info for firearm classes
+	if (slot == 0)
 	{
 		if (L4D2Version)
-			SetClientWeaponInfo_l4d2(client, weapon, ammo, clip, upgradeBit, upammo);
+		{
+			SetClientWeaponInfo_l4d2(client, weapon, ammo, clip, upgradeBit, upammo, isFirearm);
+		}
 		else
+		{
 			SetClientWeaponInfo_l4d1(client, weapon, ammo, clip);
+		}
 	}
 	else
 	{
 		SetEntProp(weapon, Prop_Send, "m_iClip1", clip);
 
- 		if (slot == 1 && ammo > 0)
-			SetEntProp(weapon, Prop_Send, "m_hasDualWeapons" ,ammo);
+		if (slot == 1 && ammo > 0)
+			SetEntProp(weapon, Prop_Send, "m_hasDualWeapons", ammo);
+		
+		// Apply upgrade info for secondary firearms (pistols)
+		if (isFirearm && L4D2Version)
+		{
+			SetEntProp(weapon, Prop_Send, "m_upgradeBitVec", upgradeBit);
+			SetEntProp(weapon, Prop_Send, "m_nUpgradedPrimaryAmmoLoaded", upammo);
+		}
 	}
 }
 
-void GetItemInfo(int client, int slot, int weapon, int &ammo, int &clip, int &upgradeBit, int &upammo, bool isPistol)
+void GetItemInfo(int client, int slot, int weapon, int &ammo, int &clip, int &upgradeBit, int &upammo, bool isPistol, bool isFirearm = false)
 {
-	// Check if weapon is a firearm (not melee or chainsaw)
-	bool bIsFirearm = false;
-	char sClsName[32];
-	if (weapon > 0)
-	{
-		GetEntityClassname(weapon, sClsName, sizeof(sClsName));
-		
-		// Check if it's a firearm (primary or pistol)
-		if (StrContains(sClsName, "weapon_smg") == 0 ||
-			StrContains(sClsName, "weapon_rifle") == 0 ||
-			StrContains(sClsName, "weapon_shotgun") == 0 ||
-			StrContains(sClsName, "weapon_sniper") == 0 ||
-			StrContains(sClsName, "weapon_grenade_launcher") == 0 ||
-			StrContains(sClsName, "weapon_pistol") == 0)
-		{
-			bIsFirearm = true;
-		}
-	}
-	
-	if (bIsFirearm)
+	if (slot == 0)
 	{
 		if (L4D2Version)
-			GetClientWeaponInfo_l4d2(client, weapon, ammo, clip, upgradeBit, upammo);
+		{
+			GetClientWeaponInfo_l4d2(client, weapon, ammo, clip, upgradeBit, upammo, isFirearm);
+		}
 		else
-			GetClientWeaponInfo_l4d1(client,weapon, ammo, clip);
+		{
+			GetClientWeaponInfo_l4d1(client, weapon, ammo, clip);
+		}
 	}
 	else
 	{
 		ammo = 0;
 		upgradeBit = 0;
 		upammo = 0;
-		clip = GetEntProp(weapon, Prop_Send, "m_iClip1" );
+		clip = GetEntProp(weapon, Prop_Send, "m_iClip1");
 
 		if (isPistol)
-			ammo = GetEntProp(weapon, Prop_Send, "m_hasDualWeapons" );
+			ammo = GetEntProp(weapon, Prop_Send, "m_hasDualWeapons");
+		
+		// Get upgrade info for secondary firearms
+		if (isFirearm && L4D2Version)
+		{
+			upgradeBit = GetEntProp(weapon, Prop_Send, "m_upgradeBitVec");
+			upammo = GetEntProp(weapon, Prop_Send, "m_nUpgradedPrimaryAmmoLoaded");
+		}
 	}
 }
 
@@ -1135,7 +1088,7 @@ int CreateItemAttach(int client, char[] classname, int slot)
 	if(GetConVarInt(l4d_me_view) != 1 || !IsSurvivor(client) || !IsPlayerAlive(client))
 		return -1;
 
-	char model[LEN64];
+	char model[PLATFORM_MAX_PATH];
 
 	if (L4D2Version)
 		GetModelFromClass_l4d2(classname, model, slot);
@@ -1171,7 +1124,7 @@ int CreateItemAttach(int client, char[] classname, int slot)
 		case 0: //Slot0
 		{
 			SetVariantString("medkit");
-			AcceptEntityInput(entity, "SetParentAttachment", entity);
+				AcceptEntityInput(entity, "SetParentAttachment", entity);
 
 			if(StrContains(ModelName, "survivor_teenangst", false) != -1 || StrContains(ModelName, "survivor_producer", false) != -1) //Zoey Rochelle
 			{
@@ -1191,7 +1144,7 @@ int CreateItemAttach(int client, char[] classname, int slot)
 		case 1: //Slot1
 		{
 			SetVariantString("molotov");
-			AcceptEntityInput(entity, "SetParentAttachment", entity);
+				AcceptEntityInput(entity, "SetParentAttachment", entity);
 
 			if (L4D2Version)
 				SetVector(Pos, 0.0,  0.0, 0.0), SetVector(Ang, 120.0, 90.0, 0.0);
@@ -1201,7 +1154,7 @@ int CreateItemAttach(int client, char[] classname, int slot)
 		case 2: //Slot2
 		{
 			SetVariantString("molotov");
-			AcceptEntityInput(entity, "SetParentAttachment", entity);
+				AcceptEntityInput(entity, "SetParentAttachment", entity);
 
 			if (L4D2Version)
 				SetVector(Pos, 0.0, 4.0, 0.0), SetVector(Ang, 0.0, 90.0, 0.0);
@@ -1211,7 +1164,7 @@ int CreateItemAttach(int client, char[] classname, int slot)
 		case 3: //Slot3
 		{
 			SetVariantString("medkit");
-			AcceptEntityInput(entity, "SetParentAttachment", entity);
+				AcceptEntityInput(entity, "SetParentAttachment", entity);
 
 			if (L4D2Version)
 			{
@@ -1226,7 +1179,7 @@ int CreateItemAttach(int client, char[] classname, int slot)
 		case 4: //Slot4
 		{
 			SetVariantString("pills");
-			AcceptEntityInput(entity, "SetParentAttachment", entity);
+				AcceptEntityInput(entity, "SetParentAttachment", entity);
 
 			if(StrContains(ModelName, "survivor_teenangst", false) != -1 || StrContains(ModelName, "survivor_producer", false) != -1) //Zoey Rochelle
 			{
@@ -1437,7 +1390,7 @@ void LoadEquipmentAll() //FOR MISSION LOST
 	}
 }
 
-void ResetBackupItemsAll()
+void CleanBackupDataAll()
 {
 	for(int i = 1; i <= MaxClients; i++)
 	{
@@ -1456,6 +1409,7 @@ void ResetBackupItemsAll()
 #define model_weapon_rifle_sg552 "models/w_models/weapons/w_rifle_sg552.mdl"
 #define model_weapon_rifle_desert "models/w_models/weapons/w_desert_rifle.mdl"
 #define model_weapon_rifle_ak47 "models/w_models/weapons/w_rifle_ak47.mdl"
+#define model_weapon_rifle_m60 "models/w_models/weapons/w_m60.mdl"
 #define model_weapon_smg "models/w_models/weapons/w_smg_uzi.mdl"
 #define model_weapon_smg_silenced "models/w_models/weapons/w_smg_a.mdl"
 #define model_weapon_smg_mp5 "models/w_models/weapons/w_smg_mp5.mdl"
@@ -1467,7 +1421,6 @@ void ResetBackupItemsAll()
 #define model_weapon_sniper_scout "models/w_models/weapons/w_sniper_scout.mdl"
 #define model_weapon_sniper_military "models/w_models/weapons/w_sniper_military.mdl"
 #define model_weapon_sniper_awp "models/w_models/weapons/w_sniper_awp.mdl"
-#define model_weapon_rifle_m60 "models/w_models/weapons/w_m60.mdl"
 #define model_weapon_grenade_launcher "models/w_models/weapons/w_grenade_launcher.mdl"
 #define model_weapon_pistol "models/w_models/weapons/w_pistol_A.mdl"
 #define model_weapon_pistol_magnum "models/w_models/weapons/w_desert_eagle.mdl"
@@ -1497,91 +1450,100 @@ void ResetBackupItemsAll()
 #define model_weapon_pain_pills "models/w_models/weapons/w_eq_painpills.mdl"
 #define model_weapon_adrenaline "models/w_models/weapons/w_eq_adrenaline.mdl"
 
-
-int GetModelFromClass_l4d2(char[] weapon, char model[LEN64], int slot = 0)
+int GetModelFromClass_l4d2(char[] weapon, char model[PLATFORM_MAX_PATH], int slot = 0)
 {
+	// Check for third party melee weapons first
+	if (slot == 1 && StrContains(weapon, "weapon_melee_") == 0)
+	{
+		// Check if it's a third party melee weapon
+		for (int i = 0; i < g_hThirdPartyMeleeNames.Length; i++)
+		{
+			char meleeName[LEN64];
+			g_hThirdPartyMeleeNames.GetString(i, meleeName, sizeof(meleeName));
+			
+			if (StrEqual(weapon, meleeName))
+			{
+				char meleeModel[PLATFORM_MAX_PATH];
+				g_hThirdPartyMeleeModels.GetString(i, meleeModel, sizeof(meleeModel));
+				strcopy(model, PLATFORM_MAX_PATH, meleeModel);
+				return 1;
+			}
+		}
+	}
+	
 	switch(slot)
 	{
 		case 0:
 		{
-			if(StrEqual(weapon, "weapon_rifle"))strcopy(model, LEN64, model_weapon_rifle);
-			else if(StrEqual(weapon, "weapon_rifle_sg552"))strcopy(model, LEN64, model_weapon_rifle_sg552);
-			else if(StrEqual(weapon, "weapon_rifle_desert"))strcopy(model, LEN64, model_weapon_rifle_desert);
-			else if(StrEqual(weapon, "weapon_rifle_ak47"))strcopy(model, LEN64, model_weapon_rifle_ak47);
-			else if(StrEqual(weapon, "weapon_rifle_m60"))strcopy(model, LEN64, model_weapon_rifle_m60);
-			else if(StrEqual(weapon, "weapon_smg"))strcopy(model, LEN64, model_weapon_smg);
-			else if(StrEqual(weapon, "weapon_smg_silenced"))strcopy(model, LEN64, model_weapon_smg_silenced);
-			else if(StrEqual(weapon, "weapon_smg_mp5"))strcopy(model, LEN64, model_weapon_smg_mp5);
-			else if(StrEqual(weapon, "weapon_pumpshotgun"))strcopy(model, LEN64, model_weapon_pumpshotgun);
-			else if(StrEqual(weapon, "weapon_shotgun_chrome"))strcopy(model, LEN64, model_weapon_shotgun_chrome);
-			else if(StrEqual(weapon, "weapon_autoshotgun"))strcopy(model, LEN64, model_weapon_autoshotgun);
-			else if(StrEqual(weapon, "weapon_shotgun_spas"))strcopy(model, LEN64, model_weapon_shotgun_spas);
-			else if(StrEqual(weapon, "weapon_hunting_rifle"))strcopy(model, LEN64, model_weapon_hunting_rifle);
-			else if(StrEqual(weapon, "weapon_sniper_scout"))strcopy(model, LEN64, model_weapon_sniper_scout);
-			else if(StrEqual(weapon, "weapon_sniper_military"))strcopy(model, LEN64, model_weapon_sniper_military);
-			else if(StrEqual(weapon, "weapon_sniper_awp"))strcopy(model, LEN64, model_weapon_sniper_awp);
-			else if(StrEqual(weapon, "weapon_grenade_launcher"))strcopy(model, LEN64, model_weapon_grenade_launcher);
+			if(StrEqual(weapon, "weapon_rifle"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_rifle);
+			else if(StrEqual(weapon, "weapon_rifle_sg552"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_rifle_sg552);
+			else if(StrEqual(weapon, "weapon_rifle_desert"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_rifle_desert);
+			else if(StrEqual(weapon, "weapon_rifle_ak47"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_rifle_ak47);
+			else if(StrEqual(weapon, "weapon_rifle_m60"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_rifle_m60);
+			else if(StrEqual(weapon, "weapon_smg"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_smg);
+			else if(StrEqual(weapon, "weapon_smg_silenced"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_smg_silenced);
+			else if(StrEqual(weapon, "weapon_smg_mp5"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_smg_mp5);
+			else if(StrEqual(weapon, "weapon_pumpshotgun"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_pumpshotgun);
+			else if(StrEqual(weapon, "weapon_shotgun_chrome"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_shotgun_chrome);
+			else if(StrEqual(weapon, "weapon_autoshotgun"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_autoshotgun);
+			else if(StrEqual(weapon, "weapon_shotgun_spas"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_shotgun_spas);
+			else if(StrEqual(weapon, "weapon_hunting_rifle"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_hunting_rifle);
+			else if(StrEqual(weapon, "weapon_sniper_scout"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_sniper_scout);
+			else if(StrEqual(weapon, "weapon_sniper_military"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_sniper_military);
+			else if(StrEqual(weapon, "weapon_sniper_awp"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_sniper_awp);
+			else if(StrEqual(weapon, "weapon_grenade_launcher"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_grenade_launcher);
 			else model="";
 		}
 		case 1:
 		{
-			if(StrEqual(weapon, "weapon_pistol"))strcopy(model, LEN64, model_weapon_pistol);
-			else if(StrEqual(weapon, "weapon_pistol_magnum"))strcopy(model, LEN64, model_weapon_pistol_magnum);
-			else if(StrEqual(weapon, "weapon_chainsaw"))strcopy(model, LEN64, model_weapon_chainsaw);
-			else if(StrEqual(weapon, "weapon_melee_fireaxe"))strcopy(model, LEN64, model_weapon_melee_fireaxe);
-			else if(StrEqual(weapon, "weapon_melee_baseball_bat"))strcopy(model, LEN64, model_weapon_melee_baseball_bat);
-			else if(StrEqual(weapon, "weapon_melee_crowbar"))strcopy(model, LEN64, model_weapon_melee_crowbar);
-			else if(StrEqual(weapon, "weapon_melee_electric_guitar"))strcopy(model, LEN64, model_weapon_melee_electric_guitar);
-			else if(StrEqual(weapon, "weapon_melee_cricket_bat"))strcopy(model, LEN64, model_weapon_melee_cricket_bat);
-			else if(StrEqual(weapon, "weapon_melee_frying_pan"))strcopy(model, LEN64, model_weapon_melee_frying_pan);
-			else if(StrEqual(weapon, "weapon_melee_golfclub"))strcopy(model, LEN64, model_weapon_melee_golfclub);
-			else if(StrEqual(weapon, "weapon_melee_machete"))strcopy(model, LEN64, model_weapon_melee_machete);
-			else if(StrEqual(weapon, "weapon_melee_katana"))strcopy(model, LEN64, model_weapon_melee_katana);
-			else if(StrEqual(weapon, "weapon_melee_tonfa"))strcopy(model, LEN64, model_weapon_melee_tonfa);
-			else if(StrEqual(weapon, "weapon_melee_riotshield"))strcopy(model, LEN64, model_weapon_melee_riotshield);
-			else if (StrEqual(weapon, "weapon_melee_hunting_knife"))strcopy(model, LEN64, model_weapon_melee_hunting_knife);
-			else if (StrEqual(weapon, "weapon_melee_knife"))strcopy(model, LEN64, model_weapon_melee_knife);
-			else if (StrEqual(weapon, "weapon_melee_pitchfork"))strcopy(model, LEN64, model_weapon_melee_pitchfork);
-			else if (StrEqual(weapon, "weapon_melee_shovel"))strcopy(model, LEN64, model_weapon_melee_shovel);
-			else if (StrContains(weapon, "weapon_melee_") == 0)
-			{
-				// Handle third-party melee weapons
-				char sModelPath[PLATFORM_MAX_PATH];
-				Format(sModelPath, sizeof(sModelPath), "models/weapons/melee/w_%s.mdl", weapon[13]);
-				if (FileExists(sModelPath, true))
-					strcopy(model, LEN64, sModelPath);
-				else
-					model="";
-			}
+			if(StrEqual(weapon, "weapon_pistol"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_pistol);
+			else if(StrEqual(weapon, "weapon_pistol_magnum"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_pistol_magnum);
+			else if(StrEqual(weapon, "weapon_chainsaw"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_chainsaw);
+			else if(StrEqual(weapon, "weapon_melee_fireaxe"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_melee_fireaxe);
+			else if(StrEqual(weapon, "weapon_melee_baseball_bat"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_melee_baseball_bat);
+			else if(StrEqual(weapon, "weapon_melee_crowbar"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_melee_crowbar);
+			else if(StrEqual(weapon, "weapon_melee_electric_guitar"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_melee_electric_guitar);
+			else if(StrEqual(weapon, "weapon_melee_cricket_bat"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_melee_cricket_bat);
+			else if(StrEqual(weapon, "weapon_melee_frying_pan"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_melee_frying_pan);
+			else if(StrEqual(weapon, "weapon_melee_golfclub"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_melee_golfclub);
+			else if(StrEqual(weapon, "weapon_melee_machete"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_melee_machete);
+			else if(StrEqual(weapon, "weapon_melee_katana"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_melee_katana);
+			else if(StrEqual(weapon, "weapon_melee_tonfa"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_melee_tonfa);
+			else if(StrEqual(weapon, "weapon_melee_riotshield"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_melee_riotshield);
+			else if (StrEqual(weapon, "weapon_melee_hunting_knife"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_melee_hunting_knife);
+			else if (StrEqual(weapon, "weapon_melee_knife"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_melee_knife);
+			else if (StrEqual(weapon, "weapon_melee_pitchfork"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_melee_pitchfork);
+			else if (StrEqual(weapon, "weapon_melee_shovel"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_melee_shovel);
 			else model="";
 		}
 		case 2:
 		{
-			if(StrEqual(weapon, "weapon_molotov"))strcopy(model, LEN64, model_weapon_molotov);
-			else if(StrEqual(weapon, "weapon_pipe_bomb"))strcopy(model, LEN64, model_weapon_pipe_bomb);
-			else if(StrEqual(weapon, "weapon_vomitjar"))strcopy(model, LEN64, model_weapon_vomitjar);
+			if(StrEqual(weapon, "weapon_molotov"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_molotov);
+			else if(StrEqual(weapon, "weapon_pipe_bomb"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_pipe_bomb);
+			else if(StrEqual(weapon, "weapon_vomitjar"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_vomitjar);
 			else model="";
 		}
 		case 3:
 		{
-			if(StrEqual(weapon, "weapon_first_aid_kit"))strcopy(model, LEN64, model_weapon_first_aid_kit);
-			else if(StrEqual(weapon, "weapon_defibrillator"))strcopy(model, LEN64, model_weapon_defibrillator);
-			else if(StrEqual(weapon, "weapon_upgradepack_explosive"))strcopy(model, LEN64, model_weapon_upgradepack_explosive);
-			else if(StrEqual(weapon, "weapon_upgradepack_incendiary"))strcopy(model, LEN64, model_weapon_upgradepack_incendiary);
+			if(StrEqual(weapon, "weapon_first_aid_kit"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_first_aid_kit);
+			else if(StrEqual(weapon, "weapon_defibrillator"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_defibrillator);
+			else if(StrEqual(weapon, "weapon_upgradepack_explosive"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_upgradepack_explosive);
+			else if(StrEqual(weapon, "weapon_upgradepack_incendiary"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_upgradepack_incendiary);
 			else model="";
 		}
 		case 4:
 		{
-			if(StrEqual(weapon, "weapon_pain_pills"))strcopy(model, LEN64, model_weapon_pain_pills);
-			else if(StrEqual(weapon, "weapon_adrenaline"))strcopy(model, LEN64, model_weapon_adrenaline);
+			if(StrEqual(weapon, "weapon_pain_pills"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_pain_pills);
+			else if(StrEqual(weapon, "weapon_adrenaline"))strcopy(model, PLATFORM_MAX_PATH, model_weapon_adrenaline);
 			else model="";
 		}
 	}
+	return 0;
 }
 
 #define model1_weapon_rifle "models/w_models/weapons/w_rifle_m16a2.mdl"
 #define model1_weapon_autoshotgun "models/w_models/weapons/w_autoshot_m4super.mdl"
-#define model1_weapon_pumpshotgun "models/w_models/weapons/w_shotgun.mdl"
+#define model1_weapon_pumpshotgun "models/w_models/Weapons/w_shotgun.mdl"
 #define model1_weapon_hunting_rifle "models/w_models/weapons/w_sniper_mini14.mdl"
 #define model1_weapon_smg "models/w_models/Weapons/w_smg_uzi.mdl"
 #define model1_weapon_pistol "models/w_models/Weapons/w_pistol_1911.mdl"
@@ -1590,55 +1552,58 @@ int GetModelFromClass_l4d2(char[] weapon, char model[LEN64], int slot = 0)
 #define model1_weapon_first_aid_kit "models/w_models/weapons/w_eq_Medkit.mdl"
 #define model1_weapon_pain_pills "models/w_models/weapons/w_eq_painpills.mdl"
 
-int GetModelFromClass_l4d1(char[] weapon, char model[LEN64], int slot = 0)
+int GetModelFromClass_l4d1(char[] weapon, char model[PLATFORM_MAX_PATH], int slot = 0)
 {
 	switch(slot)
 	{
 		case 0:
 		{
-			if(StrEqual(weapon, "weapon_rifle"))strcopy(model, LEN64, model1_weapon_rifle);
-			else if(StrEqual(weapon, "weapon_autoshotgun"))strcopy(model, LEN64, model1_weapon_autoshotgun);
-			else if(StrEqual(weapon, "weapon_pumpshotgun"))strcopy(model, LEN64, model1_weapon_pumpshotgun);
-			else if(StrEqual(weapon, "weapon_hunting_rifle"))strcopy(model, LEN64, model1_weapon_hunting_rifle);
-			else if(StrEqual(weapon, "weapon_smg"))strcopy(model, LEN64, model1_weapon_smg);
+			if(StrEqual(weapon, "weapon_rifle"))strcopy(model, PLATFORM_MAX_PATH, model1_weapon_rifle);
+			else if(StrEqual(weapon, "weapon_autoshotgun"))strcopy(model, PLATFORM_MAX_PATH, model1_weapon_autoshotgun);
+			else if(StrEqual(weapon, "weapon_pumpshotgun"))strcopy(model, PLATFORM_MAX_PATH, model1_weapon_pumpshotgun);
+			else if(StrEqual(weapon, "weapon_hunting_rifle"))strcopy(model, PLATFORM_MAX_PATH, model1_weapon_hunting_rifle);
+			else if(StrEqual(weapon, "weapon_smg"))strcopy(model, PLATFORM_MAX_PATH, model1_weapon_smg);
 			else model="";
 		}
 		case 1:
 		{
-			if(StrEqual(weapon, "weapon_pistol"))strcopy(model, LEN64, model1_weapon_pistol);
+			if(StrEqual(weapon, "weapon_pistol"))strcopy(model, PLATFORM_MAX_PATH, model1_weapon_pistol);
 			else model="";
 		}
 		case 2:
 		{
-			if(StrEqual(weapon, "weapon_molotov"))strcopy(model, LEN64, model1_weapon_molotov);
-			else if(StrEqual(weapon, "weapon_pipe_bomb"))strcopy(model, LEN64, model1_weapon_pipe_bomb);
+			if(StrEqual(weapon, "weapon_molotov"))strcopy(model, PLATFORM_MAX_PATH, model1_weapon_molotov);
+			else if(StrEqual(weapon, "weapon_pipe_bomb"))strcopy(model, PLATFORM_MAX_PATH, model1_weapon_pipe_bomb);
 			else model="";
 		}
 		case 3:
 		{
-			if(StrEqual(weapon, "weapon_first_aid_kit"))strcopy(model, LEN64, model1_weapon_first_aid_kit);
+			if(StrEqual(weapon, "weapon_first_aid_kit"))strcopy(model, PLATFORM_MAX_PATH, model1_weapon_first_aid_kit);
 			else model="";
 		}
 		case 4:
 		{
-			if(StrEqual(weapon, "weapon_pain_pills"))strcopy(model, LEN64, model1_weapon_pain_pills);
+			if(StrEqual(weapon, "weapon_pain_pills"))strcopy(model, PLATFORM_MAX_PATH, model1_weapon_pain_pills);
 			else model="";
 		}
 	}
+	return 0;
 }
 
-int GetItemClass(int ent, char classname[LEN64])
+void GetItemClass(int ent, char classname[LEN64])
 {
 	classname = "";
 
 	if(ent > 0)
 	{
-		GetEntityClassname(ent, classname, LEN64);
+		GetEntityClassname(ent, classname, sizeof(classname));
+		
 		if(StrEqual(classname, "weapon_melee"))
 		{
 			char model[128];
 			GetEntPropString(ent, Prop_Data, "m_ModelName", model, sizeof(model));
 
+			// Check for standard melee weapons
 			if(StrContains(model, "fireaxe")>=0)classname="weapon_melee_fireaxe";
 			else if(StrContains(model, "v_bat")>=0)	classname="weapon_melee_baseball_bat";
 			else if(StrContains(model, "crowbar")>=0)classname="weapon_melee_crowbar";
@@ -1656,12 +1621,13 @@ int GetItemClass(int ent, char classname[LEN64])
 			else if(StrContains(model, "shovel")>=0)classname="weapon_melee_shovel";
 			else 
 			{
-				// Handle third-party melee weapons
-				char sScriptName[64];
-				GetEntPropString(ent, Prop_Data, "m_strMapSetScriptName", sScriptName, sizeof(sScriptName));
-				if (strlen(sScriptName) > 0)
+				// Check for third party melee weapons
+				char scriptName[64];
+				GetEntPropString(ent, Prop_Data, "m_strMapSetScriptName", scriptName, sizeof(scriptName));
+				
+				if(!StrEqual(scriptName, ""))
 				{
-					Format(classname, LEN64, "weapon_melee_%s", sScriptName);
+					Format(classname, LEN64, "weapon_melee_%s", scriptName);
 				}
 				else
 				{
@@ -1680,54 +1646,112 @@ int CreateWeaponEnt(char[] classname)
 	if(StrContains(classname, "weapon_melee_")<0)
 	{
 		int ent = CreateEntityByName(classname);
-		DispatchSpawn(ent);
-		return ent;
+		if (ent > 0)
+		{
+			DispatchSpawn(ent);
+			return ent;
+		}
 	}
 	else
 	{
 		int ent = CreateEntityByName("weapon_melee");
-
-		if(StrEqual(classname, "weapon_melee_fireaxe"))DispatchKeyValue( ent, "melee_script_name", "fireaxe");
-		else if(StrEqual(classname, "weapon_melee_baseball_bat"))DispatchKeyValue( ent, "melee_script_name", "baseball_bat");
-		else if(StrEqual(classname, "weapon_melee_crowbar"))DispatchKeyValue( ent, "melee_script_name", "crowbar");
-		else if(StrEqual(classname, "weapon_melee_electric_guitar"))DispatchKeyValue( ent, "melee_script_name", "electric_guitar");
-		else if(StrEqual(classname, "weapon_melee_cricket_bat"))DispatchKeyValue( ent, "melee_script_name", "cricket_bat");
-		else if(StrEqual(classname, "weapon_melee_frying_pan"))DispatchKeyValue( ent, "melee_script_name", "frying_pan");
-		else if(StrEqual(classname, "weapon_melee_golfclub"))DispatchKeyValue( ent, "melee_script_name", "golfclub");
-		else if(StrEqual(classname, "weapon_melee_machete"))DispatchKeyValue( ent, "melee_script_name", "machete");
-		else if(StrEqual(classname, "weapon_melee_katana"))DispatchKeyValue( ent, "melee_script_name", "katana");
-		else if(StrEqual(classname, "weapon_melee_tonfa"))DispatchKeyValue( ent, "melee_script_name", "tonfa");
-		else if(StrEqual(classname, "weapon_melee_riotshield"))DispatchKeyValue( ent, "melee_script_name", "riotshield");
-		else if(StrEqual(classname, "weapon_melee_hunting_knife"))DispatchKeyValue( ent, "melee_script_name", "hunting_knife" );
-		else if(StrEqual(classname, "weapon_melee_knife"))DispatchKeyValue( ent, "melee_script_name", "knife" );
-		else if(StrEqual(classname, "weapon_melee_pitchfork"))DispatchKeyValue( ent, "melee_script_name", "pitchfork" );
-		else if(StrEqual(classname, "weapon_melee_shovel"))DispatchKeyValue( ent, "melee_script_name", "shovel" );
-		else 
-		{
-			// Handle third-party melee weapons
-			char sScriptName[64];
-			strcopy(sScriptName, sizeof(sScriptName), classname[13]); // Remove "weapon_melee_"
-			DispatchKeyValue( ent, "melee_script_name", sScriptName);
-		}
 		
-		DispatchSpawn(ent);
-		return ent;
+		if(ent > 0)
+		{
+			char scriptName[64];
+			
+			if(StrEqual(classname, "weapon_melee_fireaxe"))strcopy(scriptName, sizeof(scriptName), "fireaxe");
+			else if(StrEqual(classname, "weapon_melee_baseball_bat"))strcopy(scriptName, sizeof(scriptName), "baseball_bat");
+			else if(StrEqual(classname, "weapon_melee_crowbar"))strcopy(scriptName, sizeof(scriptName), "crowbar");
+			else if(StrEqual(classname, "weapon_melee_electric_guitar"))strcopy(scriptName, sizeof(scriptName), "electric_guitar");
+			else if(StrEqual(classname, "weapon_melee_cricket_bat"))strcopy(scriptName, sizeof(scriptName), "cricket_bat");
+			else if(StrEqual(classname, "weapon_melee_frying_pan"))strcopy(scriptName, sizeof(scriptName), "frying_pan");
+			else if(StrEqual(classname, "weapon_melee_golfclub"))strcopy(scriptName, sizeof(scriptName), "golfclub");
+			else if(StrEqual(classname, "weapon_melee_machete"))strcopy(scriptName, sizeof(scriptName), "machete");
+			else if(StrEqual(classname, "weapon_melee_katana"))strcopy(scriptName, sizeof(scriptName), "katana");
+			else if(StrEqual(classname, "weapon_melee_tonfa"))strcopy(scriptName, sizeof(scriptName), "tonfa");
+			else if(StrEqual(classname, "weapon_melee_riotshield"))strcopy(scriptName, sizeof(scriptName), "riotshield");
+			else if(StrEqual(classname, "weapon_melee_hunting_knife"))strcopy(scriptName, sizeof(scriptName), "hunting_knife");
+			else if(StrEqual(classname, "weapon_melee_knife"))strcopy(scriptName, sizeof(scriptName), "knife");
+			else if(StrEqual(classname, "weapon_melee_pitchfork"))strcopy(scriptName, sizeof(scriptName), "pitchfork");
+			else if(StrEqual(classname, "weapon_melee_shovel"))strcopy(scriptName, sizeof(scriptName), "shovel");
+			else
+			{
+				// Handle third party melee weapons
+				ReplaceString(classname, LEN64, "weapon_melee_", "");
+				strcopy(scriptName, sizeof(scriptName), classname);
+			}
+			
+			DispatchKeyValue(ent, "melee_script_name", scriptName);
+			DispatchSpawn(ent);
+			return ent;
+		}
+	}
+	
+	return 0;
+}
+
+// Function to scan for third party melee weapons
+void ScanThirdPartyMeleeWeapons()
+{
+	if(!L4D2Version) return;
+	
+	// Clear existing arrays
+	g_hThirdPartyMeleeModels.Clear();
+	g_hThirdPartyMeleeNames.Clear();
+	
+	// Scan weapon_melee entities in the map
+	int entity = -1;
+	while ((entity = FindEntityByClassname(entity, "weapon_melee")) != -1)
+	{
+		char scriptName[64];
+		GetEntPropString(entity, Prop_Data, "m_strMapSetScriptName", scriptName, sizeof(scriptName));
+		
+		if (!StrEqual(scriptName, "") && 
+			!StrEqual(scriptName, "fireaxe") &&
+			!StrEqual(scriptName, "baseball_bat") &&
+			!StrEqual(scriptName, "crowbar") &&
+			!StrEqual(scriptName, "electric_guitar") &&
+			!StrEqual(scriptName, "cricket_bat") &&
+			!StrEqual(scriptName, "frying_pan") &&
+			!StrEqual(scriptName, "golfclub") &&
+			!StrEqual(scriptName, "machete") &&
+			!StrEqual(scriptName, "katana") &&
+			!StrEqual(scriptName, "tonfa") &&
+			!StrEqual(scriptName, "riotshield") &&
+			!StrEqual(scriptName, "hunting_knife") &&
+			!StrEqual(scriptName, "knife") &&
+			!StrEqual(scriptName, "pitchfork") &&
+			!StrEqual(scriptName, "shovel"))
+		{
+			// This is a third party melee weapon
+			char modelName[PLATFORM_MAX_PATH];
+			GetEntPropString(entity, Prop_Data, "m_ModelName", modelName, sizeof(modelName));
+			
+			char weaponName[LEN64];
+			Format(weaponName, sizeof(weaponName), "weapon_melee_%s", scriptName);
+			
+			// Add to arrays
+			g_hThirdPartyMeleeModels.PushString(modelName);
+			g_hThirdPartyMeleeNames.PushString(weaponName);
+			
+			// Precache the model
+			PrecacheModel(modelName);
+		}
 	}
 }
 
 public void OnMapStart()
 {
-	// Clear stored items state (only state, not backup data)
+	// Clean stored items state on map start
 	ResetClientStateAll();
-	
-	// Reset mode selection flags
-	for (int i = 1; i <= MaxClients; i++)
-	{
-		g_bModeSelected[i] = false;
-	}
 	
 	if(L4D2Version)
 	{
+		// Scan for third party melee weapons
+		ScanThirdPartyMeleeWeapons();
+		
+		// Precache standard models
 		PrecacheModel(model_weapon_rifle);
 		PrecacheModel(model_weapon_rifle_sg552);
 		PrecacheModel(model_weapon_rifle_desert);
@@ -1776,7 +1800,6 @@ public void OnMapStart()
 		PrecacheModel(model_weapon_pain_pills);
 		PrecacheModel(model_weapon_adrenaline);
 
-		// Precache vanilla melee scripts
 		PrecacheGeneric( "scripts/melee/baseball_bat.txt", true);
 		PrecacheGeneric( "scripts/melee/cricket_bat.txt", true);
 		PrecacheGeneric( "scripts/melee/crowbar.txt", true);
@@ -1788,9 +1811,6 @@ public void OnMapStart()
 		PrecacheGeneric( "scripts/melee/machete.txt", true);
 		PrecacheGeneric( "scripts/melee/tonfa.txt", true);
 		PrecacheGeneric( "scripts/melee/riotshield.txt", true);
-		
-		// Precache third-party melee scripts
-		PrecacheThirdPartyMeleeScripts();
 	}
 	else
 	{
@@ -1809,52 +1829,6 @@ public void OnMapStart()
 	for (int client = 1; client <= MaxClients; client++) {
 		MsgOn[client] = true;
 		OnClientCookiesCached(client);
-	}
-}
-
-void PrecacheThirdPartyMeleeScripts()
-{
-	// Precache all third-party melee scripts from scripts/melee directory
-	char sPath[PLATFORM_MAX_PATH];
-	Format(sPath, sizeof(sPath), "scripts/melee");
-	
-	DirectoryListing hDir = OpenDirectory(sPath);
-	if (hDir != null)
-	{
-		char sFile[64];
-		FileType fileType;
-		
-		while (ReadDirEntry(hDir, sFile, sizeof(sFile), fileType))
-		{
-			if (fileType == FileType_File && StrContains(sFile, ".txt") != -1)
-			{
-				char sScriptPath[PLATFORM_MAX_PATH];
-				Format(sScriptPath, sizeof(sScriptPath), "scripts/melee/%s", sFile);
-				
-				// Skip vanilla scripts we already precached
-				if (StrEqual(sFile, "baseball_bat.txt") ||
-					StrEqual(sFile, "cricket_bat.txt") ||
-					StrEqual(sFile, "crowbar.txt") ||
-					StrEqual(sFile, "electric_guitar.txt") ||
-					StrEqual(sFile, "fireaxe.txt") ||
-					StrEqual(sFile, "frying_pan.txt") ||
-					StrEqual(sFile, "golfclub.txt") ||
-					StrEqual(sFile, "katana.txt") ||
-					StrEqual(sFile, "machete.txt") ||
-					StrEqual(sFile, "tonfa.txt") ||
-					StrEqual(sFile, "riotshield.txt") ||
-					StrEqual(sFile, "knife.txt") ||
-					StrEqual(sFile, "pitchfork.txt") ||
-					StrEqual(sFile, "shovel.txt"))
-				{
-					continue;
-				}
-				
-				PrecacheGeneric(sScriptPath, true);
-			}
-		}
-		
-		CloseHandle(hDir);
 	}
 }
 
@@ -1934,7 +1908,7 @@ public Action eMapTransition(Handle event, const char[] name, bool dontBroadcast
 public Action eFinaleWin(Handle event, const char[] name, bool dontBroadcast)
 {	
 	ResetClientStateAll();
-	ResetBackupItemsAll();
+	CleanBackupDataAll();
 }
 
 public Action ePlayerDisconnect(Handle event, const char[] name, bool dontBroadcast)
@@ -1942,7 +1916,6 @@ public Action ePlayerDisconnect(Handle event, const char[] name, bool dontBroadc
 	int client = GetClientOfUserId(GetEventInt(event, "userid"));
 
 	ResetClientState(client);
-	g_bModeSelected[client] = false;
 }
 
 void SetClientWeaponInfo_l4d1(int client, int ent, int ammo, int clip)
@@ -1968,7 +1941,7 @@ void SetClientWeaponInfo_l4d1(int client, int ent, int ammo, int clip)
 	}
 }
 
-void SetClientWeaponInfo_l4d2(int client, int ent , int ammo, int clip, int upgradeBit, int upammo)
+void SetClientWeaponInfo_l4d2(int client, int ent , int ammo, int clip, int upgradeBit, int upammo, bool isFirearm = false)
 {
 	if (ent > 0 && GetClientTeam(client) == 2)
 	{
@@ -1978,8 +1951,13 @@ void SetClientWeaponInfo_l4d2(int client, int ent , int ammo, int clip, int upgr
 		int ammoOffset = FindSendPropInfo("CTerrorPlayer", "m_iAmmo");
 
 		SetEntProp(ent, Prop_Send, "m_iClip1", clip);
-		SetEntProp(ent, Prop_Send, "m_upgradeBitVec", upgradeBit);
-		SetEntProp(ent, Prop_Send, "m_nUpgradedPrimaryAmmoLoaded", upammo);
+		
+		// Only apply upgrade info for firearm classes
+		if (isFirearm)
+		{
+			SetEntProp(ent, Prop_Send, "m_upgradeBitVec", upgradeBit);
+			SetEntProp(ent, Prop_Send, "m_nUpgradedPrimaryAmmoLoaded", upammo);
+		}
 
 		if (StrEqual(sWeapon, "weapon_rifle") || StrEqual(sWeapon, "weapon_rifle_sg552") || StrEqual(sWeapon, "weapon_rifle_desert") || StrEqual(sWeapon, "weapon_rifle_ak47") || StrEqual(sWeapon, "weapon_rifle_m60"))
 			SetEntData(client, ammoOffset+(12), ammo);
@@ -2024,7 +2002,7 @@ void GetClientWeaponInfo_l4d1(int client , int ent, int &ammo, int &clip)
 	}
 }
 
-void GetClientWeaponInfo_l4d2(int client, int ent, int &ammo, int &clip, int &upgradeBit, int &upammo)
+void GetClientWeaponInfo_l4d2(int client, int ent, int &ammo, int &clip, int &upgradeBit, int &upammo, bool isFirearm = false)
 {
 	if (ent > 0 && GetClientTeam(client) == 2)
 	{
@@ -2033,9 +2011,19 @@ void GetClientWeaponInfo_l4d2(int client, int ent, int &ammo, int &clip, int &up
 
 		int ammoOffset = FindSendPropInfo("CTerrorPlayer", "m_iAmmo");
 
-		upgradeBit = GetEntProp(ent, Prop_Send, "m_upgradeBitVec");
-		upammo = GetEntProp(ent, Prop_Send, "m_nUpgradedPrimaryAmmoLoaded");
 		clip = GetEntProp(ent, Prop_Send, "m_iClip1");
+		
+		// Only get upgrade info for firearm classes
+		if (isFirearm)
+		{
+			upgradeBit = GetEntProp(ent, Prop_Send, "m_upgradeBitVec");
+			upammo = GetEntProp(ent, Prop_Send, "m_nUpgradedPrimaryAmmoLoaded");
+		}
+		else
+		{
+			upgradeBit = 0;
+			upammo = 0;
+		}
 		
 		if (StrEqual(sWeapon, "weapon_rifle") || StrEqual(sWeapon, "weapon_rifle_sg552") || StrEqual(sWeapon, "weapon_rifle_desert") || StrEqual(sWeapon, "weapon_rifle_ak47") || StrEqual(sWeapon, "weapon_rifle_m60"))
 			ammo = GetEntData(client, ammoOffset+(12));
@@ -2056,7 +2044,7 @@ void GetClientWeaponInfo_l4d2(int client, int ent, int &ammo, int &clip, int &up
 	}
 }
 
-void DropPrimaryWeapon_l4d1(int client, char[] weapon, int ammo, int clip)
+void DropPrimaryWeapon_l4d1(int client, char[] weapon, int ammo, int clip) //[LEN64]
 {
 	bool Drop = false;
 
@@ -2065,7 +2053,7 @@ void DropPrimaryWeapon_l4d1(int client, char[] weapon, int ammo, int clip)
 	else if (StrEqual(weapon, "weapon_pumpshotgun") || StrEqual(weapon, "weapon_autoshotgun"))
 		Drop=true;
 
- 	if(Drop)
+	if(Drop)
 	{
 		int index = CreateEntityByName(weapon);
 
@@ -2081,7 +2069,7 @@ void DropPrimaryWeapon_l4d1(int client, char[] weapon, int ammo, int clip)
 	}
 }
 
-void DropPrimaryWeapon_l4d2(int client, char[] weapon, int ammo, int clip, int upgradeBit, int upammo)
+void DropPrimaryWeapon_l4d2(int client, char[] weapon, int ammo, int clip, int upgradeBit, int upammo) //[LEN64]
 {
 	bool Drop = false;
 
@@ -2110,8 +2098,13 @@ void DropPrimaryWeapon_l4d2(int client, char[] weapon, int ammo, int clip, int u
 		SetEntProp(index, Prop_Send, "m_iExtraPrimaryAmmo", ammo);
 		SetEntProp(index, Prop_Send, "m_iClip1", clip);
 
-		upgradeBit+=0;
-		upammo+=0;
+		// Only apply upgrade info for firearm classes
+		bool isFirearm = IsFirearmClass(weapon);
+		if (isFirearm)
+		{
+			SetEntProp(index, Prop_Send, "m_upgradeBitVec", upgradeBit);
+			SetEntProp(index, Prop_Send, "m_nUpgradedPrimaryAmmoLoaded", upammo);
+		}
 	}
 }
 
@@ -2137,6 +2130,11 @@ void ResetClientState(int i)
 	LastMeSwitchTime[i] = 0.0;
 	LastSwitchTime[i] = 0.0;
 	ThrowTime[i] = 0.0;
+	
+	// Reset combo key states
+	EKeyPressed[i] = false;
+	RMBKeyPressed[i] = false;
+	ComboKeyPressTime[i] = 0.0;
 }
 
 void ResetClientStateAll()
@@ -2201,7 +2199,7 @@ static bool IsValidEnt(int ent)
 		return false;
 }
 
-static bool IsValidEntS(int ent, char[] classname)
+static bool IsValidEntS(int ent, char[] classname) //[LEN64]
 {
 	if(IsValidEnt(ent))
 	{
@@ -2376,7 +2374,7 @@ stock bool IsInfected(int client)
 stock bool IsPlayerIncapped(int client)
 {
 	if (GetEntProp(client, Prop_Send, "m_isIncapacitated", 1)) return true;
- 	return false;
+	return false;
 }
 
 stock bool IsOnGround(int client)

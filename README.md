@@ -9,6 +9,4 @@ https://forums.alliedmods.net/showthread.php?t=166580 (panxiaohai)
 
 https://forums.alliedmods.net/showthread.php?t=288689 (MasterMind420)(There's no SP or SMX, I've already checked for you.)
 
-v3.9 is on its way, don't worry.
-
 v4.0 will undergo major updates and fixes.
